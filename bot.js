@@ -1,437 +1,463 @@
-const Jimp = require("jimp");
 const TelegramBot = require("node-telegram-bot-api");
+const Vibrant = require("node-vibrant");
 
 const bot = new TelegramBot("5716895097:AAFriyu13C__xRMuLk4dph4S4e-ZMkho_dI", {
   polling: true,
 });
 
-// Клавіатури з кнопками
-function createMenuKeyboard() {
-  return {
+const mainMenu = {
+  reply_markup: {
     keyboard: [
-      ["/start", "/reactions"],
-      ["/addbuttons", "/movebuttons"],
-      ["/disablebuttons"],
+      ["📚 Інструкції"],
+      ["🔗 Посилання"],
+      ["📷 Настроїти медіа"],
+      ["🖼️ Додати водяний знак"],
+      ["💬 Коментарі"],
+      ["⏰ Таймер видалення"],
+      ["Більше налаштувань"],
+      ["🔴 Редагувати кнопки"],
+      ["Автопідпис"]
     ],
     resize_keyboard: true,
-    one_time_keyboard: true,
-  };
-}
+  },
+};
 
-function sendMenuMessage(chatId) {
-  bot.sendMessage(chatId, "Меню:", {
-    reply_markup: JSON.stringify(createMenuKeyboard()),
-  });
-}
+const instructionsMenu = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: "Інструкція 1", callback_data: "instruction_1" },
+        { text: "Інструкція 2", callback_data: "instruction_2" },
+      ],
+      [{ text: "Назад", callback_data: "back_to_main_menu" }],
+    ],
+  },
+};
 
-bot.onText(/\/menu/, (msg) => {
-  console.log("Received /menu command");
-  const chatId = msg.chat.id;
-  sendMenuMessage(chatId);
-});
+const linksMenu = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: "Посилання 1", url: "http://example.com/link1" },
+        { text: "Посилання 2", url: "http://example.com/link2" },
+      ],
+      [{ text: "Назад", callback_data: "back_to_main_menu" }],
+    ],
+  },
+};
 
-let buttons = [["Нова кнопка 1", "Нова кнопка 2"], ["Нова кнопка 3"]];
+const postEditMenu = {
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: "Автопідпис", callback_data: "add_signature" }],
+    ],
+  },
+};
 
-// Таблиця доступних реакцій у телеграм
-const reactionTable = [
-  ["👍", "👎"],
-  ["😄", "😢"],
-  ["😂", "😡"],
-];
+const reactionsMenu = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: "❤️", callback_data: "reaction_heart" },
+        { text: "😏", callback_data: "reaction_smirk" },
+      ],
+      [{ text: "Применить", callback_data: "apply_reactions" }],
+    ],
+  },
+};
+
+const reactionMapping = {
+  reaction_heart: "👍",
+  reaction_smirk: "👎",
+};
+
+const editButtonsMenu = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        { text: "🔄 Редактировать кнопки", callback_data: "edit_buttons" },
+      ],
+      [{ text: "Назад", callback_data: "back_to_main_menu" }],
+    ],
+  },
+};
+
+
+let postReactions = [];
+
+const commentsButton = { text: "💬", callback_data: "reaction_comment" };
+
+const commentsMenu = {
+  reply_markup: {
+    inline_keyboard: [
+      [commentsButton],
+      [{ text: "💬 Коментарі", callback_data: "comments" }],
+      [{ text: "Примінити", callback_data: "apply_comments" }],
+    ],
+  },
+};
+
+let hasComments = false;
+let copyChannels = [];
+
+let mediaPosition = "above";
 
 bot.onText(/\/start/, (msg) => {
-  console.log("Received /start command");
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "Привіт! Я бот автосповіщень.");
+  bot.sendMessage(chatId, "Вітаю! Виберіть дію:", mainMenu);
+});
 
+bot.onText(/📚 Інструкції/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "Оберіть інструкцію:", instructionsMenu);
+});
+
+bot.onText(/ Автопідпис/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "Автопідпис:", postEditMenu);
+});
+
+bot.onText(/🔗 Посилання/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "Оберіть посилання:", linksMenu);
+});
+
+bot.onText(/📷 Настроїти медіа/, (msg) => {
+  const chatId = msg.chat.id;
   const options = {
-    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "Над текстом", callback_data: "position_above" },
+          { text: "Під текстом", callback_data: "position_below" },
+        ],
+        [{ text: "Реакції", callback_data: "reactions" }],
+      ],
+    },
   };
-
-  // Зображення над текстом
-  bot.sendMessage(chatId, "Тут може бути зображення над текстом", options);
-
-  // Зображення під текстом
-  bot.sendMessage(chatId, "Тут може бути зображення під текстом", options);
-
-  // Додати клавіатуру з кнопками
-  const replyMarkup = {
-    keyboard: buttons,
-    resize_keyboard: true,
-    one_time_keyboard: true,
-  };
-
-  bot.sendMessage(chatId, "Ось деякі кнопки:", {
-    reply_markup: JSON.stringify(replyMarkup),
-  });
-
-  // Додати кнопку для команди /reactions
-  const reactionButton = {
-    text: "Вибрати реакцію",
-    callback_data: "/reactions",
-  };
-
-  const inlineKeyboard = {
-    inline_keyboard: [[reactionButton]],
-  };
-
-  // Відправити повідомлення з кнопкою для команди /reactions
-  bot.sendMessage(chatId, "Доступні дії:", { reply_markup: inlineKeyboard });
-
-  // Додати кнопку /menu
-  const menuButton = {
-    text: "Меню",
-    callback_data: "/menu",
-  };
-
-  const inlineMenuButton = {
-    inline_keyboard: [[menuButton]],
-  };
-
-  bot.sendMessage(chatId, "Ось кнопка /menu:", {
-    reply_markup: inlineMenuButton,
-  });
-
-  bot.sendMessage(
-    chatId,
-    "Ласкаво просимо! Ви можете надіслати свою заявку, і ми її опрацюємо."
-  );
-
-  bot.sendMessage(
-    chatId,
-    'Отримуйте останні новини та спеціальні пропозиції у наших рекламних розсилках. Якщо бажаєте підписатися, натисніть кнопку "Підписатися" нижче.',
-    {
-      reply_markup: {
-        keyboard: [["Підписатися"]],
-        resize_keyboard: true,
-        one_time_keyboard: true,
-      },
-    }
-  );
+  bot.sendMessage(chatId, "Оберіть розташування медіа:", options);
 });
 
-bot.onText(/Підписатися/, (msg) => {
-  console.log("Received subscription request");
+bot.onText(/💬 Коментарі/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "Оберіть коментарі:", commentsMenu);
+});
+
+bot.onText(/⏰ Таймер удалення/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "Введіть тривалість таймера (у годинах):");
+});
+
+bot.onText(/🖼️ Додати водяний знак/, (msg) => {
   const chatId = msg.chat.id;
   bot.sendMessage(
     chatId,
-    "Ви успішно підписалися на рекламну розсилку! Будь ласка, залишайтеся на зв'язку для отримання останніх новин та спеціальних пропозицій."
+    "Відправте фото, до якого потрібно додати водяний знак."
   );
 });
 
-bot.onText(/\/advertise/, (msg) => {
-  console.log("Received /advertise command");
+bot.onText(/Більше налаштувань/, (msg) => {
   const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "Виберіть дію:", {
+    reply_markup: {
+      keyboard: [
+        ["📤 Копирование постов"],
+      ],
+      resize_keyboard: true,
+    },
+  });
+});
 
-  // Перевірити, чи є підписка на рекламну розсилку
+bot.onText(/📤 Копіювання постов/, (msg) => {
+  const chatId = msg.chat.id;
+  bot.sendMessage(chatId, "Виберіть канали для копіювання:", {
+    reply_markup: {
+      keyboard: [
+        ["📤 Вибрати всі канали"],
+        ["📥 Зняти виділення з усіх каналів"],
+        ["✅ Зберегти налаштування"],
+      ],
+      resize_keyboard: true,
+    },
+  });
+});
 
-  if (advertise) {
-    // Відправити повідомлення для розсилки реклами
-    bot.sendMessage(chatId, "Ось наша остання рекламна пропозиція:");
-    bot.sendMessage(
-      chatId,
-      "Тут можна вказати деталі рекламного повідомлення і його формат."
-    );
+bot.onText(/📤 Вибрати всі канали/, (msg) => {
+  const chatId = msg.chat.id;
+  copyChannels = ["channel1", "channel2", "channel3"];
+  bot.sendMessage(chatId, "Всі канали були вибрані для копіювання.");
+});
 
-    //деталізації пропозиції
+bot.onText(/📥 Зняти виділення з усіх каналів/, (msg) => {
+  const chatId = msg.chat.id;
+  copyChannels = [];
+  bot.sendMessage(chatId, "Виділення з усіх каналів було знято.");
+});
 
-    // const keyboard = {
-    //   inline_keyboard: [
-    //     [
-    //       { text: 'Детальніше', url: 'http://example.com' }
-    //     ]
-    //   ]
-    // };
-    // bot.sendMessage(chatId, 'Дізнайтеся більше про нашу пропозицію:', { reply_markup: keyboard });
+bot.onText(/✅ Зберегти налаштування/, (msg) => {
+  const chatId = msg.chat.id;
+  if (copyChannels.length > 0) {
+    bot.sendMessage(chatId, `Канали для копіювання були збережені: ${copyChannels.join(", ")}.`);
+    copyPostToChannels(copyChannels);
   } else {
-    bot.sendMessage(
-      chatId,
-      'Ви не підписані на рекламну розсилку. Щоб підписатися, натисніть кнопку "Підписатися".'
-    );
+    bot.sendMessage(chatId, "Ви не вибрали жодного каналу для копіювання.");
   }
 });
 
-bot.onText(/\/disablebuttons/, (msg) => {
-  console.log("Received /disablebuttons command");
+bot.onText(/🔴 Редагувати кнопки/, (msg) => {
   const chatId = msg.chat.id;
-
-  const replyMarkup = {
-    remove_keyboard: true,
-  };
-
-  bot.sendMessage(chatId, "Кнопки вимкнено.", {
-    reply_markup: JSON.stringify(replyMarkup),
-  });
+  bot.sendMessage(chatId, "Виберіть кнопку для редагування:", editButtonsMenu);
 });
 
-bot.onText(/\/addbuttons/, (msg) => {
-  console.log("Received /addbuttons command");
-  const chatId = msg.chat.id;
-
-  const replyMarkup = {
-    keyboard: buttons,
-    resize_keyboard: true,
-    one_time_keyboard: true,
+function handleMediaPosition(chatId, messageId) {
+  const options = {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "Над текстом", callback_data: "position_above" },
+          { text: "Під текстом", callback_data: "position_below" },
+        ],
+      ],
+    },
   };
-
-  bot.sendMessage(chatId, "Додано нові кнопки.", {
-    reply_markup: JSON.stringify(replyMarkup),
+  bot.editMessageText("Оберіть розташування медіа:", {
+    chat_id: chatId,
+    message_id: messageId,
+    reply_markup: options.reply_markup,
   });
-});
-
-bot.onText(/\/movebuttons/, (msg) => {
-  console.log("Received /movebuttons command");
-  const chatId = msg.chat.id;
-
-  // Перемішуємо кнопки випадковим чином
-  buttons = shuffleButtons(buttons);
-
-  // Оновлюємо клавіатуру з перемішаними кнопками
-  const replyMarkup = {
-    keyboard: buttons,
-    resize_keyboard: true,
-    one_time_keyboard: true,
-  };
-
-  // Відправляємо повідомлення з перемішаними кнопками
-  bot.sendMessage(chatId, "Переміщено кнопки.", {
-    reply_markup: JSON.stringify(replyMarkup),
-  });
-});
-
-function shuffleButtons(buttons) {
-  const shuffledButtons = [...buttons];
-
-  for (let i = shuffledButtons.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffledButtons[i], shuffledButtons[j]] = [
-      shuffledButtons[j],
-      shuffledButtons[i],
-    ];
-  }
-
-  return shuffledButtons;
 }
 
-bot.onText(/\/reactions/, (msg) => {
-  console.log("Received /reactions command");
-  const chatId = msg.chat.id;
-
-  // Створюємо клавіатуру з доступними реакціями
-  const replyMarkup = {
-    keyboard: reactionTable,
-    resize_keyboard: true,
-    one_time_keyboard: true,
-  };
-
-  // Відправляємо повідомлення з таблицею реакцій
-  bot.sendMessage(chatId, "Оберіть реакцію:", {
-    reply_markup: JSON.stringify(replyMarkup),
-  });
-});
-
-bot.onText(/\/disablereaction (.+)/, (msg, match) => {
-  console.log("Received /disablereaction command");
-  const chatId = msg.chat.id;
-  const reaction = match[1];
-
-  for (let i = 0; i < reactionTable.length; i++) {
-    const row = reactionTable[i];
-    const index = row.indexOf(reaction);
-    if (index !== -1) {
-      row.splice(index, 1);
-      break;
-    }
-  }
-
-  const replyMarkup = {
-    keyboard: reactionTable,
-    resize_keyboard: true,
-    one_time_keyboard: true,
-  };
-
-  bot.sendMessage(chatId, `Реакцію ${reaction} вимкнено.`, {
-    reply_markup: JSON.stringify(replyMarkup),
-  });
-});
+function addWatermark(imagePath, watermarkText, callback) {
+  Vibrant.from(imagePath)
+    .getPalette()
+    .then((palette) => {
+      const dominantColor = palette.Vibrant.hex;
+      const watermarkedImagePath = "path/to/watermarked/image.jpg";
+      callback(watermarkedImagePath);
+    })
+    .catch((error) => {
+      console.error("Ошибка при обработке изображения:", error);
+      callback(null);
+    });
+}
 
 bot.on("callback_query", (query) => {
   const chatId = query.message.chat.id;
   const messageId = query.message.message_id;
   const data = query.data;
 
-  if (data === "/reactions") {
-    console.log("Received /reactions inline button");
-    const replyMarkup = {
-      keyboard: reactionTable,
-      resize_keyboard: true,
-      one_time_keyboard: true,
-    };
-    bot.sendMessage(chatId, "Оберіть реакцію:", {
-      reply_markup: JSON.stringify(replyMarkup),
+  if (data === "add_signature") {
+    bot.answerCallbackQuery(query.id, "Ви обрали додати автопідпис");
+    bot.sendMessage(chatId, "Введіть текст автопідпису:");
+  }
+
+  if (data.startsWith("select_signature_")) {
+    const selectedIndex = parseInt(data.slice(17)); 
+    const selectedSignature = getSignatureByIndex(chatId, selectedIndex);
+
+    bot.answerCallbackQuery(query.id, "Ви обрали варіант автопідпису");
+  }
+
+  if (data === "edit_buttons") {
+    bot.sendMessage(chatId, "Оберіть кнопку для редагування:", editButtonsMenu);
+  }
+
+  if (data.startsWith("edit_button_text_")) {
+    const buttonText = data.replace("edit_button_text_", "");
+    bot.sendMessage(chatId, `Введіть новий текст для кнопки "${buttonText}":`);
+  }
+
+  if (data === "reactions") {
+    bot.editMessageText("Оберіть реакції:", {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: reactionsMenu.reply_markup,
     });
-  } else {
-    console.log("Received reaction:", data);
-    bot.deleteMessage(chatId, messageId);
-    const replyMarkup = {
-      keyboard: buttons,
+  } else if (data.startsWith("reaction_")) {
+    const reaction = data.replace("reaction_", "");
+    const index = postReactions.indexOf(reaction);
+
+    if (index === -1) {
+      postReactions.push(reaction);
+    } else {
+      postReactions.splice(index, 1);
+    }
+
+    const updatedReactionsMenu = {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "❤️", callback_data: "reaction_heart" },
+            { text: "😏", callback_data: "reaction_smirk" },
+          ],
+          [{ text: "Применить", callback_data: "apply_reactions" }],
+        ],
+      },
     };
-    bot.sendMessage(chatId, "Ось деякі кнопки:", {
-      reply_markup: JSON.stringify(replyMarkup),
+
+    if (postReactions.length > 0) {
+      updatedReactionsMenu.reply_markup.inline_keyboard.unshift(
+        postReactions.map((reaction) => ({
+          text: reactionMapping[reaction],
+          callback_data: `reaction_${reaction}`,
+        }))
+      );
+    }
+
+    bot.editMessageReplyMarkup(
+      {
+        inline_keyboard: updatedReactionsMenu.reply_markup.inline_keyboard,
+      },
+      {
+        chat_id: chatId,
+        message_id: messageId,
+      }
+    );
+  } else if (data === "apply_reactions") {
+    bot.answerCallbackQuery(query.id, "Реакції успішно застосовані");
+  }
+
+  if (data === "back_to_main_menu") {
+    bot.editMessageText("Виберіть дію:", {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: mainMenu.reply_markup,
+    });
+  } else if (data === "instruction_1") {
+    // Обробка вибору першої інструкції
+    bot.answerCallbackQuery(query.id, "Ви обрали Інструкцію 1");
+    handleMediaPosition(chatId, messageId);
+  } else if (data === "instruction_2") {
+    // Обробка вибору другої інструкції
+    bot.answerCallbackQuery(query.id, "Ви обрали Інструкцію 2");
+    handleMediaPosition(chatId, messageId);
+  } else if (data === "position_above") {
+    mediaPosition = "above";
+    bot.answerCallbackQuery(query.id, "Медіа буде розташовано над текстом");
+  } else if (data === "position_below") {
+    mediaPosition = "below";
+    bot.answerCallbackQuery(query.id, "Медіа буде розташовано під текстом");
+  } else if (data === "comments") {
+    bot.editMessageText("Оберіть коментарі:", {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: commentsMenu.reply_markup,
+    });
+  } else if (data === "reaction_comment") {
+    hasComments = !hasComments;
+
+    const updatedCommentsMenu = {
+      reply_markup: {
+        inline_keyboard: [
+          [commentsButton],
+          [{ text: "Применить", callback_data: "apply_comments" }],
+        ],
+      },
+    };
+
+    if (hasComments) {
+      updatedCommentsMenu.reply_markup.inline_keyboard.unshift([
+        { text: "✅ Коментарі", callback_data: "comments" },
+      ]);
+    }
+
+    bot.editMessageReplyMarkup(
+      {
+        inline_keyboard: updatedCommentsMenu.reply_markup.inline_keyboard,
+      },
+      {
+        chat_id: chatId,
+        message_id: messageId,
+      }
+    );
+  } else if (data === "apply_comments") {
+    bot.answerCallbackQuery(query.id, "Коментарі успішно застосовані");
+  }
+
+  if (data === "copy_post") {
+    bot.answerCallbackQuery(query.id, "Откроется полный список настроек публикации");
+    // Додайте код для відображення повного списку настроек публікації, де можна вибрати канали для копіювання
+    const copyPostMenu = {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "📤 Вибрати всі канали", callback_data: "select_all_channels" },
+          ],
+          // Додайте інші кнопки або пункти меню за потреби
+        ],
+      },
+    };
+
+    bot.editMessageText("Повний список настроек публікації:", {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: copyPostMenu.reply_markup,
     });
   }
+
+  if (data === "select_all_channels") {
+    // Додайте код для вибору всіх каналів для копіювання
+    copyChannels = ["channel1", "channel2", "channel3"]; // Замініть на власну логіку вибору всіх каналів
+    bot.answerCallbackQuery(query.id, "Всі канали були вибрані для копіювання");
+  }
+
 });
 
-// Заборонені слова для коментарів
-const stopWords = ["спам", "оскорбление", "неприйнятно"];
+bot.on("photo", (msg) => {
+  const photo = msg.photo[0];
+  const fileId = photo.file_id;
+  const filePath = bot.getFileLink(fileId);
 
-// Функція для перевірки коментарів на наявність заборонених слів
-function checkComment(text) {
-  for (let i = 0; i < stopWords.length; i++) {
-    if (text.toLowerCase().includes(stopWords[i])) {
-      return true;
+  addWatermark(filePath, "Ваш водяной знак", (watermarkedImagePath) => {
+    if (watermarkedImagePath) {
+      bot.sendPhoto(msg.chat.id, watermarkedImagePath);
+    } else {
+      bot.sendMessage(
+        msg.chat.id,
+        "Виникла помилка при додаванні водяного знака"
+      );
+    }
+  });
+});
+
+bot.onText(/(\d+)/, (msg, match) => {
+  if (timerDuration === null) {
+    timerDuration = parseInt(match[0]);
+
+    if (timerDuration > 0) {
+      setTimeout(() => {
+        bot.sendMessage(msg.chat.id, "Deleting the post...");
+        timerDuration = null;
+      }, timerDuration * 3600000);
+      bot.sendMessage(msg.chat.id, `Таймер встановлено на ${timerDuration} годин(и).`);
+    } else {
+      bot.sendMessage(msg.chat.id, "Неприпустима тривалість таймера. Будь ласка, введіть додатнє число.");
+      timerDuration = null;
     }
   }
-  return false;
-}
+});
 
-bot.on("message", (msg) => {
-  console.log("Received comment:", msg.text);
+bot.onText(/(.+)/, (msg, match) => {
   const chatId = msg.chat.id;
+  const messageText = match[0];
 
-  if (checkComment(msg.text)) {
-    bot.sendMessage(chatId, "Ваш коментар не прийнятний і буде заблоковано.");
-    bot.deleteMessage(chatId, msg.message_id);
-    return;
+  if (messageText.startsWith("Введіть новий текст для кнопки")) {
+    const buttonText = messageText.replace("Введіть новий текст для кнопки ", "");
+    bot.answerCallbackQuery(query.id, `Текст кнопки "${buttonText}" було оновлено`);
   }
 
-  // Відповідь на значний коментар
-  if (msg.text.length > 20) {
-    bot.sendMessage(chatId, "Дякуємо за ваш коментар!");
-    return;
-  }
 });
 
-// Обробник команди /disablereaction
-bot.onText(/\/disablereaction (.+)/, (msg, match) => {
-  console.log("Received /disablereaction command");
+bot.onText(/\/signature (.+)/, (msg, match) => {
   const chatId = msg.chat.id;
-  const reaction = match[1];
+  const signature = match[1];
 
-  for (let i = 0; i < reactionTable.length; i++) {
-    const row = reactionTable[i];
-    const index = row.indexOf(reaction);
-    if (index !== -1) {
-      row.splice(index, 1);
-      break;
-    }
-  }
-
-  // Оновлюємо клавіатуру з реакціями
-  const replyMarkup = {
-    keyboard: reactionTable,
-    resize_keyboard: true,
-    one_time_keyboard: true,
-  };
-
-  // Відправляємо повідомлення з оновленою таблицею реакцій
-  bot.sendMessage(chatId, `Реакцію ${reaction} вимкнено.`, {
-    reply_markup: JSON.stringify(replyMarkup),
-  });
+  saveSignature(chatId, signature);
+  bot.sendMessage(chatId, "Автопідпис додано!");
 });
 
-const channelId = 1;
-// Таймер видалення з каналу
-function scheduleMessageDeletion(chatId, messageId, delay) {
-  setTimeout(() => {
-    bot.deleteMessage(chatId, messageId);
-  }, delay);
-}
-bot.sendMessage(channelId, "Текст повідомлення").then((sentMessage) => {
-  const messageId = sentMessage.message_id;
-  const delay = 60 * 60 * 1000; // 1 година
-
-  scheduleMessageDeletion(channelId, messageId, delay);
-});
-
-function deleteNewsAndCompetitions(channelId, messages) {
-  const delay = 24 * 60 * 60 * 1000; // 24 години
-
-  messages.forEach((message) => {
-    scheduleMessageDeletion(channelId, message.message_id, delay);
-  });
-}
-const newsAndCompetitions = [
-  { message_id: 1, text: "Перше повідомлення" },
-  { message_id: 2, text: "Друге повідомлення" },
-];
-
-deleteNewsAndCompetitions(channelId, newsAndCompetitions);
-
-//пересилання постів у кілька каналів і обмеження кількості публікацій постів у день
-const targetChannels = ["channel1", "channel2", "channel3"];
-function sendPostToChannels(post) {
-  targetChannels.forEach((channel) => {
-    bot.sendMessage(channel, post);
-  });
-}
-// Приклад пересилання посту
-const post = "Це новий пост!";
-const maxPostsPerDay = 10;
-
-sendPostToChannels(post);
-let postsPublishedToday = 0;
-if (postsPublishedToday < maxPostsPerDay) {
-  sendPostToChannels(post);
-  postsPublishedToday++;
-} else {
-  console.log("Досягнуто максимальної кількості публікацій у день.");
-}
-function resetPostsCounter() {
-  const now = new Date();
-  const nextDay = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 1
-  );
-  const timeUntilNextDay = nextDay.getTime() - now.getTime();
-
-  setTimeout(() => {
-    postsPublishedToday = 0;
-    resetPostsCounter();
-  }, timeUntilNextDay);
+function saveSignature(chatId, signature) {
+  //код для збереження автопідпису за chatId
+  //база даних для збереження автопідписів
 }
 
-resetPostsCounter();
-
-//Редагування медіа
-
-async function resizeImage(imagePath, width, height) {
-  const image = await Jimp.read(imagePath);
-  await image.resize(width, height).writeAsync(imagePath);
-}
-
-//Редагування тексту
-function editText(text) {
-  return text.toUpperCase();
-}
-
-//Додавання водяних знаків
-Jimp.read("шлях_до_оригінального_зображення")
-  .then((image) => {
-    return Jimp.read("шлях_до_водяного_знаку").then((watermark) => {
-      image.composite(watermark, x, y, options);
-      return image.write("шлях_до_нового_зображення");
-    });
-  })
-  .catch((err) => {
-    console.error(err);
-  });
-
-// Функція для надсилання звітності у канал
-function sendReportToChannel(channelId, report) {
-  bot.sendMessage(channelId, report);
-}
-
-
-bot.startPolling();
